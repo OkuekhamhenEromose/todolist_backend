@@ -175,22 +175,22 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom User Model
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = 'accounts.User' # Critical line: This tells Django to use our custom User model instead of the built-in auth.User. We must set this before running the first migration. If you forget this line and run migrate, Django creates the default auth_user table, and switching later requires a painful data migration
 
 # Django REST Framework configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication', # Every endpoint now requires JWT authentication by default. No more anonymous access unless explicitly allowed, JWTAuthentication looks for Authorization: Bearer <token> in every request header.
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.IsAuthenticated', # Default lockdown: Every view requires authentication unless the view explicitly overrides this (like Register and Login)
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', # Safety default: Every list endpoint returns 20 items max. A buggy frontend can't request 100,000 rows and crash the database
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
-    ],
+    ], # Filter backends: These are middleware-like components that automatically parse ?status=pending, ?search=report, and ?ordering=-due_date from the URL and apply them to your querysets.
     'PAGE_SIZE': 20,
 }
 
@@ -198,13 +198,14 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30), # Access token: Short-lived (30 minutes). If stolen, the thief has only 30 minutes of access.
+
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7), # Refresh token: Long-lived (7 days). Stored securely by the frontend. Used to get new access tokens without re-entering the password
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_TYPES': ('Bearer',), # Makes the frontend send Authorization: Bearer <token> instead of Authorization: JWT <token>. Bearer is the standard for OAuth2 and widely supported by libraries.
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
