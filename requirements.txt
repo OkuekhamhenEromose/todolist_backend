@@ -32,3 +32,17 @@ tzdata==2026.3
 # # Core Framework
 # sqlparse==0.5.5
 # tzdata==2026.3
+
+# ACTIONS PERFORMED TO SET UP POSTGRESQL
+# postgres=# CREATE DATABASE todo_db;
+# CREATE DATABASE
+# Never use the postgres superuser for your application. If your app is compromised, the attacker gets superuser privileges. todo_user has only the permissions it needs on only one database. This is the Principle of Least Privilege
+# postgres=# CREATE USER todo_user WITH PASSWORD 'todo_pas
+# sword';
+# CREATE ROLE
+# postgres=# GRANT ALL PRIVILEGES ON DATABASE todo_db TO t
+# odo_user;
+# GRANT
+# postgres=# ALTER DATABASE todo_db OWNER TO todo_user;
+# ALTER DATABASE
+# postgres=#
