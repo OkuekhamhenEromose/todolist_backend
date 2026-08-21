@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
 
 # Load environment variables from .env file
 
@@ -24,12 +25,12 @@ load_dotenv(BASE_DIR / '.env')  # Load environment variables from .env file
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', '')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',') if os.getenv('ALLOWED_HOSTS') else []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else []
 
 
 # Application definition
@@ -110,14 +111,10 @@ ASGI_APPLICATION = 'config.asgi.application'
 
 # Database (configured per environment)
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DATABASE_URL').split('/')[-1],
-        'USER': os.getenv('DATABASE_URL').split(':')[1].replace('//', ''),
-        'PASSWORD': os.getenv('DATABASE_URL').split(':')[2].split('@')[0],
-        'HOST': os.getenv('DATABASE_URL').split('@')[1].split(':')[0],
-        'PORT': os.getenv('DATABASE_URL').split(':')[-1].split('/')[0],
-    }
+    'default': dj_database_url.parse(
+        os.getenv('DATABASE_URL', ''),
+        conn_max_age=600,
+    )
 }
 
 
