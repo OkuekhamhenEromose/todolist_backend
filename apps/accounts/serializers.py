@@ -9,11 +9,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from apps.accounts.models import User
-
 # get_user_model() returns our custom User model (apps.accounts.models.User)
 # We use this instead of importing directly because it respects AUTH_USER_MODEL
-User = get_user_model
+User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """
