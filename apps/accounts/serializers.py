@@ -109,8 +109,9 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         super().__init__(*args, **kwargs)
         # The parent created self.fields['username']. We rename it to 'email'
         # so the API expects {"email": "...", "password": "..."}.
-        if 'username' in self.fields:
-            self.fields['email'] = self.fields.pop('username')
+        if self.username_field in self.fields:
+            del self.fields[self.username_field]
+        self.fields['email'] = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
         """
