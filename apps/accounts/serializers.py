@@ -4,10 +4,14 @@ A serializer in Django REST Framework is like a translator between:
 - Python objects (Django models) and JSON (for API responses)
 - JSON (from API requests) and Python objects (for validation and creation)
 """
+# Brought in in the registration feature
+from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+# Added for the login feature
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # get_user_model() returns our custom User model (apps.accounts.models.User)
 # We use this instead of importing directly because it respects AUTH_USER_MODEL
@@ -75,3 +79,56 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             **validated_data       # first_name, last_name, etc.
         )
         return user
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Email-based JWT Login Serializer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Custom serializer for email-based JWT login.
+
+    Problem: SimpleJWT's default serializer expects a field named after the
+    User model's USERNAME_FIELD (which is 'username' for AbstractUser).
+    Our frontend sends 'email' and 'password'.
+
+    Solution: We override __init__ to rename the input field from 'username'
+    to 'email', then map it back to 'username' during validation so Django's
+    authenticate() can find the user (since we store email in the username field).
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Override the field initialization from the parent class.
+
+        The parent TokenObtainPairSerializer.__init__ does:
+            self.fields[self.username_field] = serializers.CharField()
+
+        Since username_field is 'username' (from AbstractUser), it creates a
+        field called 'username'. We want the API to accept 'email' instead.
+        """
+        super().__init__(*args, **kwargs)
+        # The parent created self.fields['username']. We rename it to 'email'
+        # so the API expects {"email": "...", "password": "..."}.
+        if 'username' in self.fields:
+            self.fields['email'] = self.fields.pop('username')
+
+    def validate(self, attrs):
+        """
+        Map the email field back to username for authentication.
+
+        The parent class's validate() calls:
+            authenticate(username_field_value=..., password=...)
+
+        Since our User model stores the email address in the username column,
+        we just need to ensure attrs contains a 'username' key before the
+        parent validate() runs.
+        """
+        # Copy the email value into the username key for the parent's consumption
+        attrs['username'] = attrs.get('email', '')
+
+        # Call the parent validate which:
+        # 1. Calls authenticate(username=email, password=password)
+        # 2. Sets self.user on the serializer instance
+        # 3. Returns {} (empty dict from TokenObtainSerializer)
+        # 4. Then TokenObtainPairSerializer adds refresh/access tokens
+        return super().validate(attrs)
