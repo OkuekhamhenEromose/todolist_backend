@@ -133,3 +133,31 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         # 3. Returns {} (empty dict from TokenObtainSerializer)
         # 4. Then TokenObtainPairSerializer adds refresh/access tokens
         return super().validate(attrs)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW: User Profile Serializer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for returning the current user's profile.
+
+    This is READ-ONLY. It is used for GET /api/v1/auth/me/
+
+    Key design decisions:
+    1. No 'password' field at all — not even write_only. It simply doesn't exist.
+    2. All fields are read-only — the client cannot modify their profile through this endpoint.
+       (Profile updates will be a separate PATCH endpoint in the future.)
+    3. Minimal field set — only what the frontend header/dashboard needs.
+    """
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'date_joined',
+        ]
+        # Explicitly mark all fields as read-only. This is defense in depth:
+        # even if we accidentally include a writable field in 'fields' above,
+        # read_only_fields prevents modification.
+        read_only_fields = [
+            'id', 'email', 'first_name', 'last_name', 'date_joined',
+        ]

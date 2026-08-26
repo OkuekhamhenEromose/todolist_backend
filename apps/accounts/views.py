@@ -17,6 +17,7 @@ from apps.accounts.models import User
 
 from .serializers import UserRegistrationSerializer
 from .serializers import EmailTokenObtainPairSerializer #added for login feature, supposed to be added to userregistrationserializer but separated for explanation
+from .serializers import UserProfileSerializer
 
 # Create your views here.
 User = get_user_model()
