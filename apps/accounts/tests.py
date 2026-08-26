@@ -292,7 +292,7 @@ class UserLoginTests(APITestCase):
         decoded = AccessToken(access_token)
         # Our settings.py configured USER_ID_CLAIM = 'user_id'
         self.assertIn('user_id', decoded)
-        self.assertEqual(decoded['user_id'], self.user.pk)
+        self.assertEqual(decoded['user_id'],str(self.user.pk))
 
     def test_successful_login_does_not_expose_password(self):
         """
