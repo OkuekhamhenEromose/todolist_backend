@@ -11,7 +11,7 @@ from typing import Any, cast
 from urllib import response
 
 from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import AccessToken
@@ -421,6 +421,7 @@ class CurrentUserProfileTests(APITestCase):
     """
     Test suite for GET /api/v1/auth/me/
     """
+    client: APIClient
 
     def setUp(self):
         """
@@ -437,6 +438,25 @@ class CurrentUserProfileTests(APITestCase):
         # Generate a valid access token for this user
         # AccessToken is a SimpleJWT class that creates a signed JWT
         self.access_token = str(AccessToken.for_user(self.user))
+
+    def get_json(self, url: str) -> tuple[Response, dict[str, Any]]:
+        """
+        Typed wrapper around self.client.get. Every raw self.client.get()
+        call risks Pyright resolving to a stub overload that isn't DRF's
+        Response (HttpResponse, WSGIRequest, etc., depending on context) —
+        so ALL GET calls in this class must go through here, never direct.
+        """
+        response = cast(Response, self.client.get(url))
+        response_data = response.data
+        assert response_data is not None, 'Expected response.data to be present'
+        return response, cast(dict[str, Any], response_data)
+
+    def patch_json(self, url: str, data: dict[str, Any]) -> Response:
+        """
+        Typed wrapper around self.client.patch. Same rationale as get_json —
+        avoids raw self.client.patch() calls that the stubs mis-resolve.
+        """
+        return cast(Response, self.client.patch(url, data=data, format='json'))
 
     def _authorize_client(self):
         """
@@ -457,13 +477,13 @@ class CurrentUserProfileTests(APITestCase):
         Then 200 OK is returned with the user's profile.
         """
         self._authorize_client()
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['id'], self.user.id)
-        self.assertEqual(response.data['email'], 'sarah@example.com')
-        self.assertEqual(response.data['first_name'], 'Sarah')
-        self.assertEqual(response.data['last_name'], 'Johnson')
-        self.assertIn('date_joined', response.data)
+        self.assertEqual(data['id'], self.user.pk)
+        self.assertEqual(data['email'], 'sarah@example.com')
+        self.assertEqual(data['first_name'], 'Sarah')
+        self.assertEqual(data['last_name'], 'Johnson')
+        self.assertIn('date_joined', data)
 
     def test_profile_response_does_not_contain_password(self):
         """
@@ -471,9 +491,9 @@ class CurrentUserProfileTests(APITestCase):
         or any authentication-related fields.
         """
         self._authorize_client()
-        response = self.client.get(self.me_url)
-        self.assertNotIn('password', response.data)
-        self.assertNotIn('username', response.data)  # Internal field, not API-relevant
+        response, data = self.get_json(self.me_url)
+        self.assertNotIn('password', data)
+        self.assertNotIn('username', data)  # Internal field, not API-relevant
 
     def test_profile_fields_are_read_only(self):
         """
@@ -486,18 +506,17 @@ class CurrentUserProfileTests(APITestCase):
 
         # Attempting to PATCH /me/ should fail because RetrieveAPIView
         # does not support PATCH. This tests our endpoint is truly read-only.
-        response = self.client.patch(
+        response = self.patch_json(
             self.me_url,
             data={'first_name': 'Hacked'},
-            format='json'
         )
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
     # ─────────────────────────────────────────────────────────────
     # AUTHENTICATION FAILURE CASES
     # ─────────────────────────────────────────────────────────────
-        def test_unauthenticated_request_rejected(self):
-            """
+    def test_unauthenticated_request_rejected(self):
+        """
         Given no Authorization header,
         When GET /me/ is called,
         Then 401 Unauthorized is returned.
@@ -505,10 +524,10 @@ class CurrentUserProfileTests(APITestCase):
         # Explicitly clear any credentials
         self.client.credentials()
 
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertIn('detail', response.data)
+        self.assertIn('detail', data)
 
     def test_invalid_token_rejected(self):
         """
@@ -519,7 +538,7 @@ class CurrentUserProfileTests(APITestCase):
         self.client.credentials(
             HTTP_AUTHORIZATION='Bearer invalid.token.here'
         )
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -540,7 +559,7 @@ class CurrentUserProfileTests(APITestCase):
             HTTP_AUTHORIZATION=f'Bearer {expired_token}'
         )
 
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_token_for_deleted_user_rejected(self):
@@ -566,7 +585,7 @@ class CurrentUserProfileTests(APITestCase):
             HTTP_AUTHORIZATION=f'Bearer {temp_token}'
         )
 
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -582,7 +601,7 @@ class CurrentUserProfileTests(APITestCase):
 
         self._authorize_client()
 
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -600,7 +619,7 @@ class CurrentUserProfileTests(APITestCase):
         self.client.credentials(
             HTTP_AUTHORIZATION=f'{self.access_token}'  # No "Bearer " prefix
         )
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -611,6 +630,6 @@ class CurrentUserProfileTests(APITestCase):
         """
         self.client.credentials(HTTP_AUTHORIZATION='')
 
-        response = self.client.get(self.me_url)
+        response, data = self.get_json(self.me_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
