@@ -7,7 +7,7 @@ preferred for APIs because they provide reusable patterns.
 """
 from django.contrib.auth import get_user_model
 from rest_framework import generics, status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 # Added for the login feature
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -74,3 +74,50 @@ class LoginView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
     # No authentication required to access the login endpoint itself
     permission_classes = [AllowAny]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW: Current User Profile View
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CurrentUserView(generics.RetrieveAPIView):
+    """
+    API endpoint for retrieving the authenticated user's profile.
+
+    GET /api/v1/auth/me/
+
+    Headers required:
+        Authorization: Bearer <access_token>
+
+    Returns: User profile (200 OK)
+             or authentication error (401 Unauthorized)
+
+    Why RetrieveAPIView?
+    - It handles GET requests automatically
+    - It expects a single object (not a list)
+    - It serializes the object and returns 200
+
+    We override get_object() to return request.user instead of looking up
+    an object by URL parameter (like /users/5/). The "current user" is
+    implicitly identified by the token, not by a URL path parameter.
+    """
+    # The serializer converts the User model instance to JSON
+    serializer_class = UserProfileSerializer
+
+    # IsAuthenticated is the gatekeeper. If no valid token is provided,
+    # DRF returns 401 before this view's code ever runs.
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """
+        Override the default lookup behavior.
+
+        Normally, RetrieveAPIView expects a URL parameter like /users/5/
+        and performs: User.objects.get(pk=5)
+
+        For /me/, there is no URL parameter. The user is whoever the
+        JWT token identifies. DRF's JWTAuthentication middleware already
+        looked up the user and attached it to request.user.
+
+        We simply return that user object.
+        """
+        return self.request.user
