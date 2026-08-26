@@ -8,6 +8,7 @@ from django.urls import path
 from .views import RegisterView
 # Added for login feature
 from .views import LoginView
+from .views import CurrentUserView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
     # Feature 2: Token Refresh (returns new access token)
     # We use SimpleJWT's built-in view with no customization for MVP.
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('me/', CurrentUserView.as_view(), name='current_user'),
 ]
