@@ -1,11 +1,6 @@
 """
 Serializers for the todos app.
 """
-
-from dataclasses import fields
-from pyexpat import model
-from random import choice
-
 from rest_framework import serializers
 from .models import Task
 
