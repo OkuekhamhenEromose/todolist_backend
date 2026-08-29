@@ -35,10 +35,10 @@ class Task(models.Model):
     ]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='tasks',
-        db_index=True,
+        settings.AUTH_USER_MODEL, # Django best practice. Avoids circular imports and respects custom user models.
+        on_delete=models.CASCADE, # Matches Phase 3 design. User deletion cleans up their tasks.
+        related_name='tasks', # Enables user.tasks.all() — clean, readable reverse queries.
+        db_index=True, # Every task query starts with WHERE user_id = X. Indexing is mandatory for performance.
         help_text="The owner of this task"
     )
 
@@ -73,7 +73,7 @@ class Task(models.Model):
         help_text="Context label (e.g., work, personal)"
     )
 
-    due_date = models.DateField(
+    due_date = models.DateField( # Deadlines are day-level. Using DateTimeField would force clients to send time components they don't care about.
         null=True,
         blank=True,
         db_index=True,
@@ -90,7 +90,7 @@ class Task(models.Model):
         indexes = [
             # Composite indexes for the most common query patterns
             models.Index(fields=['user', 'status']),
-            models.Index(fields=['user', 'priorioty']),
+            models.Index(fields=['user', 'priority']),
             models.Index(fields=['user', 'category']),
             models.Index(fields=['user', 'due_date']),
         ]
