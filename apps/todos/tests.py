@@ -203,3 +203,265 @@ class TaskCreateTests(APITestCase):
         self.assertEqual(task.priority, 'medium')
         self.assertEqual(task.status, 'pending')
         self.assertIsNone(task.due_date)
+
+class TaskListTests(APITestCase):
+    """
+    Test suite for GET /api/v1/todos/ (Task Listing, Filtering, Pagination)
+    """
+    client: APIClient
+
+    def setUp(self):
+        self.list_url = '/api/v1/todos/'
+
+        self.user = User.objects.create_user(
+            username='sarah@example.com',
+            email='sarah@example.com',
+            password='SecurePass123!'
+        )
+        self.other_user = User.objects.create_user(
+            username='john@example.com',
+            email='john@example.com',
+            password='SecurePass123!'
+        )
+        self.access_token = str(AccessToken.for_user(self.user))
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {self.access_token}'
+        )
+
+        # Create tasks for our user
+        self.task_high_work = Task.objects.create(
+            user=self.user,
+            title='Finish project report',
+            description='Complete the final report for the project.',
+            status='pending',
+            priority='high',
+            category='work',
+            due_date='2026-08-20'
+        )
+        self.task_low_personal = Task.objects.create(
+            user=self.user,
+            title='Buy groceries',
+            description='Milk, eggs, bread, and fruits.',
+            status='completed',
+            priority='low',
+            category='personal',
+            due_date='2026-08-10'
+        )
+        self.task_medium_work = Task.objects.create(
+            user=self.user,
+            title='Prepare presentation',
+            description='Slides for the upcoming meeting.',
+            status='pending',
+            priority='medium',
+            category='work',
+            due_date='2026-08-25'
+        )
+        # Create task for other user (should NEVER appear)
+        Task.objects.create(
+            user=self.other_user,
+            title='Other user task',
+            description='This should not be visible to Sarah.',
+            status='pending',
+            priority='medium',
+            category='work',
+            due_date='2026-08-30'
+        )
+
+    def post_json(self, url: str, data: dict[str, Any]) -> tuple[Response, dict[str, Any]]:
+            """
+            Typed wrapper around self.client.post.
+
+            Returns both the response AND its `.data` pre-extracted as a plain,
+            guaranteed-non-None dict. We extract `.data` here (rather than relying
+            on callers to narrow it themselves) because narrowing performed inside
+            this function does not persist on `response.data` once control
+            returns to the caller — Pyright resets to the stub's declared
+            `ReturnDict | None` type at each new attribute access. Pulling it into
+            a local variable and returning that variable preserves the narrowed,
+            non-Optional type for the caller.
+            """
+            response = cast(Response, self.client.post(url, data=data, format='json'))
+            response_data = response.data
+            assert response_data is not None, 'Expected response.data to be present'
+            return response, cast(dict[str, Any], response_data)
+
+    def test_list_returns_only_own_tasks(self):
+        """
+        The response must follow DRF's standard pagination envelope.
+        """
+        response, data = self.post_json(self.list_url, {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('count', data)
+        self.assertIn('next', data)
+        self.assertIn('previous', data)
+        self.assertIn('results', data)
+        self.assertIsInstance(data['results'], list)
+
+    def test_pagination_structure(self):
+        """
+        The response must follow DRF's standard pagination envelope.
+        """
+        response, data = self.post_json(self.list_url, {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('count', data)
+        self.assertIn('next', data)
+        self.assertIn('previous', data)
+        self.assertIn('results', data)
+        self.assertIsInstance(data['results'], list)
+
+    def test_default_ordering_is_newest_first(self):
+        """
+        By default, tasks should be ordered by created_at descending.
+        """
+        response, data = self.post_json(self.list_url, {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertGreaterEqual(len(results), 2)
+        # Check that the first task is the most recently created one
+        self.assertEqual(results[0]['title'], 'Prepare presentation')
+        self.assertEqual(results[1]['title'], 'Buy groceries')
+
+    def test_filter_by_status(self):
+        """
+        Given ?status=completed,
+        Then only tasks with status='completed' are returned.
+        """
+        response, data = self.post_json(self.list_url + '?status=completed', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertTrue(all(task['status'] == 'completed' for task in results))
+
+    def test_filter_by_priority(self):
+        """
+        Given ?priority=high,
+        Then only tasks with priority='high' are returned.
+        """
+        response, data = self.post_json(self.list_url + '?priority=high', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertTrue(all(task['priority'] == 'high' for task in results))
+
+    def test_filter_by_category(self):
+        """
+        Given ?category=work,
+        Then only tasks with category='work' are returned.
+        """
+        response, data = self.post_json(self.list_url + '?category=work', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertTrue(all(task['category'] == 'work' for task in results))
+
+    def test_filter_by_due_date_range(self):
+        """
+        Given ?due_date_after=2026-08-15&due_date_before=2026-08-25,
+        Then only tasks with due_date in that range are returned.
+        """
+        response, data = self.post_json(
+            self.list_url + '?due_date_after=2026-08-15&due_date_before=2026-08-25', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        for task in results:
+            due_date = task['due_date']
+            self.assertGreaterEqual(due_date, '2026-08-15')
+            self.assertLessEqual(due_date, '2026-08-25')
+
+    def test_filter_combination(self):
+        """
+        Given multiple filters combined,
+        Then only tasks matching all criteria are returned.
+        """
+        response, data = self.post_json(
+            self.list_url + '?status=pending&priority=medium&category=work', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        for task in results:
+            self.assertEqual(task['status'], 'pending')
+            self.assertEqual(task['priority'], 'medium')
+            self.assertEqual(task['category'], 'work')
+
+    def test_search_by_title_and_description(self):
+        """
+        Given ?search=report,
+        Then tasks whose title or description contain 'report' are returned.
+        """
+        response, data = self.post_json(self.list_url + '?search=report', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertTrue(any('report' in task['title'].lower() or 'report' in task['description'].lower() for task in results))
+
+    def test_ordering_by_title_ascending(self):
+        """
+        Given ?ordering=title,
+        Then tasks are ordered by title ascending.
+        """
+        response, data = self.post_json(self.list_url + '?ordering=title', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        titles = [task['title'] for task in results]
+        self.assertEqual(titles, sorted(titles))
+
+    def test_ordering_by_due_date_descending(self):
+        """
+        Given ?ordering=-due_date,
+        Then tasks are ordered by due_date descending.
+        """
+        response, data = self.post_json(self.list_url + '?ordering=-due_date', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        due_dates = [task['due_date'] for task in results]
+        self.assertEqual(due_dates, sorted(due_dates, reverse=True))
+
+    def test_pagination_page_size(self):
+        """
+        Given ?page_size=1,
+        Then only 1 task is returned per page.
+        """
+        response, data = self.post_json(self.list_url + '?page_size=1', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertEqual(len(results), 1)
+
+    def test_pagination_custom_page_size(self):
+        """
+        Given ?page_size=2,
+        Then 2 tasks are returned per page.
+        """
+        response, data = self.post_json(self.list_url + '?page_size=2', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertEqual(len(results), 2)
+
+    def test_pagination_exceeding_max_page_size(self):
+        """
+        Given ?page_size=200 (exceeds max_page_size=100),
+        Then only 100 tasks are returned per page.
+        """
+        response, data = self.post_json(self.list_url + '?page_size=200', {})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = data['results']
+        self.assertLessEqual(len(results), 100)
+
+    def test_unauthenticated_list_rejected(self):
+        """
+        Given no Authorization header,
+        Then 401 Unauthorized is returned.
+        """
+        self.client.credentials()  # Clear auth
+
+        response, data = self.post_json(
+            self.list_url,
+            data={},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_filter_invalid_status_returns_empty(self):
+        """
+        Given ?status=invalid_status,
+        Then 400 Bad Request is returned.
+        """
+        response, data = self.post_json(self.list_url + '?status=invalid_status', {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('status', data)
+
+        
