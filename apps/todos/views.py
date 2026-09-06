@@ -18,6 +18,9 @@ class TaskCreateView(generics.CreateAPIView):
     """
     # Queryset required by the generic view for serializer context
     queryset = Task.objects.all()
+
+    # The serializer handles validation and object creation
+    serializer_class = TaskSerializer
     # Only authenticated users can create tasks
     permission_classes = [IsAuthenticated]
 
