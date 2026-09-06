@@ -5,8 +5,8 @@ Included under /api/v1/todos/ via config/urls.py
 """
 
 from django.urls import path
-from .views import TaskCreateView
+from .views import TaskListCreateView
 
 urlpatterns = [
-    path('', TaskCreateView.as_view(), name='task-create'),
+    path('', TaskListCreateView.as_view(), name='task-list-create'),
 ]
