@@ -268,7 +268,7 @@ class TaskListTests(APITestCase):
         )
 
     def post_json(self, url: str, data: dict[str, Any]) -> tuple[Response, dict[str, Any]]:
-            """
+        """
             Typed wrapper around self.client.post.
 
             Returns both the response AND its `.data` pre-extracted as a plain,
@@ -279,17 +279,29 @@ class TaskListTests(APITestCase):
             `ReturnDict | None` type at each new attribute access. Pulling it into
             a local variable and returning that variable preserves the narrowed,
             non-Optional type for the caller.
-            """
-            response = cast(Response, self.client.post(url, data=data, format='json'))
-            response_data = response.data
-            assert response_data is not None, 'Expected response.data to be present'
-            return response, cast(dict[str, Any], response_data)
+        """
+        response = cast(Response, self.client.post(url, data=data, format='json'))
+        response_data = response.data
+        assert response_data is not None, 'Expected response.data to be present'
+        return response, cast(dict[str, Any], response_data)
+
+    def get_json(self, url: str) -> tuple[Response, dict[str, Any]]:
+        """
+            Typed wrapper around self.client.get. Every raw self.client.get()
+            call risks Pyright resolving to a stub overload that isn't DRF's
+            Response (HttpResponse, WSGIRequest, etc., depending on context) —
+            so ALL GET calls in this class must go through here, never direct.
+        """
+        response = cast(Response, self.client.get(url))
+        response_data = response.data
+        assert response_data is not None, 'Expected response.data to be present'
+        return response, cast(dict[str, Any], response_data)
 
     def test_list_returns_only_own_tasks(self):
         """
         The response must follow DRF's standard pagination envelope.
         """
-        response, data = self.post_json(self.list_url, {})
+        response, data = self.get_json(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('count', data)
         self.assertIn('next', data)
@@ -301,7 +313,7 @@ class TaskListTests(APITestCase):
         """
         The response must follow DRF's standard pagination envelope.
         """
-        response, data = self.post_json(self.list_url, {})
+        response, data = self.get_json(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('count', data)
         self.assertIn('next', data)
@@ -313,7 +325,7 @@ class TaskListTests(APITestCase):
         """
         By default, tasks should be ordered by created_at descending.
         """
-        response, data = self.post_json(self.list_url, {})
+        response, data = self.get_json(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertGreaterEqual(len(results), 2)
@@ -326,7 +338,7 @@ class TaskListTests(APITestCase):
         Given ?status=completed,
         Then only tasks with status='completed' are returned.
         """
-        response, data = self.post_json(self.list_url + '?status=completed', {})
+        response, data = self.get_json(self.list_url + '?status=completed')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertTrue(all(task['status'] == 'completed' for task in results))
@@ -336,7 +348,7 @@ class TaskListTests(APITestCase):
         Given ?priority=high,
         Then only tasks with priority='high' are returned.
         """
-        response, data = self.post_json(self.list_url + '?priority=high', {})
+        response, data = self.get_json(self.list_url + '?priority=high')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertTrue(all(task['priority'] == 'high' for task in results))
@@ -346,7 +358,7 @@ class TaskListTests(APITestCase):
         Given ?category=work,
         Then only tasks with category='work' are returned.
         """
-        response, data = self.post_json(self.list_url + '?category=work', {})
+        response, data = self.get_json(self.list_url + '?category=work')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertTrue(all(task['category'] == 'work' for task in results))
@@ -356,8 +368,8 @@ class TaskListTests(APITestCase):
         Given ?due_date_after=2026-08-15&due_date_before=2026-08-25,
         Then only tasks with due_date in that range are returned.
         """
-        response, data = self.post_json(
-            self.list_url + '?due_date_after=2026-08-15&due_date_before=2026-08-25', {})
+        response, data = self.get_json(
+            self.list_url + '?due_date_after=2026-08-15&due_date_before=2026-08-25')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         for task in results:
@@ -370,8 +382,7 @@ class TaskListTests(APITestCase):
         Given multiple filters combined,
         Then only tasks matching all criteria are returned.
         """
-        response, data = self.post_json(
-            self.list_url + '?status=pending&priority=medium&category=work', {})
+        response, data = self.get_json(self.list_url + '?status=pending&priority=medium&category=work')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         for task in results:
@@ -384,7 +395,7 @@ class TaskListTests(APITestCase):
         Given ?search=report,
         Then tasks whose title or description contain 'report' are returned.
         """
-        response, data = self.post_json(self.list_url + '?search=report', {})
+        response, data = self.get_json(self.list_url + '?search=report')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertTrue(any('report' in task['title'].lower() or 'report' in task['description'].lower() for task in results))
@@ -394,7 +405,7 @@ class TaskListTests(APITestCase):
         Given ?ordering=title,
         Then tasks are ordered by title ascending.
         """
-        response, data = self.post_json(self.list_url + '?ordering=title', {})
+        response, data = self.get_json(self.list_url + '?ordering=title')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         titles = [task['title'] for task in results]
@@ -405,7 +416,7 @@ class TaskListTests(APITestCase):
         Given ?ordering=-due_date,
         Then tasks are ordered by due_date descending.
         """
-        response, data = self.post_json(self.list_url + '?ordering=-due_date', {})
+        response, data = self.get_json(self.list_url + '?ordering=-due_date')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         due_dates = [task['due_date'] for task in results]
@@ -416,7 +427,7 @@ class TaskListTests(APITestCase):
         Given ?page_size=1,
         Then only 1 task is returned per page.
         """
-        response, data = self.post_json(self.list_url + '?page_size=1', {})
+        response, data = self.get_json(self.list_url + '?page_size=1')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertEqual(len(results), 1)
@@ -426,7 +437,7 @@ class TaskListTests(APITestCase):
         Given ?page_size=2,
         Then 2 tasks are returned per page.
         """
-        response, data = self.post_json(self.list_url + '?page_size=2', {})
+        response, data = self.get_json(self.list_url + '?page_size=2')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertEqual(len(results), 2)
@@ -436,7 +447,7 @@ class TaskListTests(APITestCase):
         Given ?page_size=200 (exceeds max_page_size=100),
         Then only 100 tasks are returned per page.
         """
-        response, data = self.post_json(self.list_url + '?page_size=200', {})
+        response, data = self.get_json(self.list_url + '?page_size=200')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = data['results']
         self.assertLessEqual(len(results), 100)
@@ -448,10 +459,7 @@ class TaskListTests(APITestCase):
         """
         self.client.credentials()  # Clear auth
 
-        response, data = self.post_json(
-            self.list_url,
-            data={},
-        )
+        response, data = self.get_json(self.list_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -460,8 +468,6 @@ class TaskListTests(APITestCase):
         Given ?status=invalid_status,
         Then 400 Bad Request is returned.
         """
-        response, data = self.post_json(self.list_url + '?status=invalid_status', {})
+        response, data = self.get_json(self.list_url + '?status=invalid_status')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('status', data)
-
-        
